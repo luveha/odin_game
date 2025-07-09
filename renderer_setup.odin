@@ -6,7 +6,7 @@ import "vendor:sdl2/ttf"
 
 createWindow :: proc(screen: ^Screen) -> ^sdl2.Window {
     window := sdl2.CreateWindow(
-        "Odin 16x16 Grid",
+        "Odin Game",
         sdl2.WINDOWPOS_CENTERED, sdl2.WINDOWPOS_CENTERED,
         screen.width, screen.height,
         sdl2.WINDOW_SHOWN

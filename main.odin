@@ -40,24 +40,50 @@ keyEvents :: proc(running: ^bool, info: ^Information, you: ^Entity, screen: ^Scr
                     if you.ypos >= 1 {
                         you.ypos -= 1
                         moved = true
+                    } else {
+                        y_curr := info.game.gMap.y
+                        if((y_curr - 1) >= 0){
+                            info.game.gMap.y -= 1
+                            you.ypos = info.screen.rows -1
+                        }
                     }
                     you.texture = 1
                 case sdl2.Keycode.S:
                     if you.ypos + 1 < screen.rows {
                         you.ypos += 1
                         moved = true
+                    } else {
+                        y_max := info.game.gMap.y_max
+                        y_curr := info.game.gMap.y
+                        if((y_curr + 1) < y_max){
+                            info.game.gMap.y += 1
+                            you.ypos = 0
+                        }
                     }
                     you.texture = 3
                 case sdl2.Keycode.A:
                     if you.xpos >= 1 {
                         you.xpos -= 1
                         moved = true
+                    } else {
+                        x_curr := info.game.gMap.x
+                        if((x_curr - 1) >= 0){
+                            info.game.gMap.x -= 1
+                            you.xpos = info.screen.cols -1
+                        }
                     }
                     you.texture = 4
                 case sdl2.Keycode.D:
                     if you.xpos + 1 < screen.cols {
                         you.xpos += 1
                         moved = true
+                    } else {
+                        x_max := info.game.gMap.x_max
+                        x_curr := info.game.gMap.x
+                        if((x_curr + 1) < x_max){
+                            info.game.gMap.x += 1
+                            you.xpos = 0
+                        }
                     }
                     you.texture = 2
                 }
@@ -80,8 +106,13 @@ keyEvents :: proc(running: ^bool, info: ^Information, you: ^Entity, screen: ^Scr
 }
 
 
-draw :: proc(info: ^Information, you: ^Entity, textEntities: []TextEntity, enemies: ^Enemies ) {
+draw :: proc(info: ^Information, you: ^Entity, textEntities: []TextEntity ) {
     
+    xMapPos := info.game.gMap.x
+    yMapPos := info.game.gMap.y
+
+    enemies := info.game.gMap.enemies[xMapPos][yMapPos].enemies
+
     renderer := &info.screen.renderer
     // Clear screen
     sdl2.SetRenderDrawColor(renderer^, 0, 0, 0, 255)
@@ -125,13 +156,14 @@ draw :: proc(info: ^Information, you: ^Entity, textEntities: []TextEntity, enemi
         h = cell_height,
     }
     sdl2.RenderCopy(renderer^, you.textures[you.texture], nil, &dstrect)
-
+    
+    
     for i in 0..<screen.cols {
         for j in 0..<screen.rows {
-            if(enemies.enemies[i][j] != nil) {
-                if enemies.enemies[i][j].texture == nil {
+            if(enemies[i][j] != nil) {
+                if enemies[i][j].texture == nil {
                     fmt.eprintf("Error: Enemy at [%d][%d] has nil texture\n", i, j)
-                    enemies.enemies[i][j].texture = info.game.textures["rang"]
+                    enemies[i][j].texture = info.game.textures["rang"]
                 }
                 dstrect := sdl2.Rect {
                     x = i * cell_width,
@@ -139,10 +171,11 @@ draw :: proc(info: ^Information, you: ^Entity, textEntities: []TextEntity, enemi
                     w = cell_width,
                     h = cell_height,
                 }
-                sdl2.RenderCopy(renderer^, enemies.enemies[i][j].texture, nil, &dstrect)
+                sdl2.RenderCopy(renderer^, enemies[i][j].texture, nil, &dstrect)
             }
         }
     }
+
     if textEntities != nil {
         for textEnt in textEntities {
             text_texture := createTextTexture(renderer^, screen.font, buildString(textEnt.text, points, ""), textEnt.color)
@@ -184,10 +217,16 @@ drawMenu :: proc(info: ^Information) {
     sdl2.RenderCopy(renderer^, text_texture, nil, &text_rect)
 }
 
-eventLoop :: proc(you: ^Entity, enemies: ^Enemies, info: ^Information) {
-    if enemies.enemies[you.xpos][you.ypos] != nil {
-        free(enemies.enemies[you.xpos][you.ypos])
-        enemies.enemies[you.xpos][you.ypos] = nil
+eventLoop :: proc(you: ^Entity, info: ^Information) {
+    xMapPos := info.game.gMap.x
+    yMapPos := info.game.gMap.y
+
+    chunk := info.game.gMap.enemies[xMapPos][yMapPos]
+    enemies := chunk.enemies
+    
+    if enemies[you.xpos][you.ypos] != nil {
+        free(enemies[you.xpos][you.ypos])
+        enemies[you.xpos][you.ypos] = nil
         info.game.points += 10
     }
 
@@ -197,14 +236,66 @@ eventLoop :: proc(you: ^Entity, enemies: ^Enemies, info: ^Information) {
         y := rand.int31_max(info.screen.cols)
 
         isTakenByPlayer : bool = (you.xpos == x) && (you.ypos == y)
-        isOccupied : bool = (enemies.enemies[x][y] != nil)
+        isOccupied : bool = (enemies[x][y] != nil)
 
         if(!isTakenByPlayer && !isOccupied) {
-            enemies.enemies[x][y] = new(Enemy)
-            enemies.enemies[x][y].texture = info.game.textures["rang"]
+            enemies[x][y] = new(Enemy)
+            enemies[x][y].texture = info.game.textures["rang"]
         }
     }
 }
+
+makePlayer :: proc(you: ^Entity, info: Information) {
+    you.ypos = 0
+    you.xpos = 0
+    you.textures = make([]^sdl2.Texture,5)
+    you.textures[0] = makeTexture(info.screen.renderer, makeSurface("sanic/sanic"))
+    you.textures[1] = makeTexture(info.screen.renderer, makeSurface("sanic/sanic_ran_up"))
+    you.textures[2] = makeTexture(info.screen.renderer, makeSurface("sanic/sanic_ran_right"))
+    you.textures[3] = makeTexture(info.screen.renderer, makeSurface("sanic/sanic_ran_down"))
+    you.textures[4] = makeTexture(info.screen.renderer, makeSurface("sanic/sanic_ran_left"))
+    you.cooldown = 0
+}
+
+makeMap :: proc(gameMap: ^Map, rows: int, cols: int, info: ^Information) {
+    mapCol := 3
+    mapRow := 3
+
+    // Allocate matrix for map chunks
+    enemiesMatrix := make([][]^Enemies, mapCol)
+    for i in 0..<mapCol {
+        enemiesMatrix[i] = make([]^Enemies, mapRow)
+    }
+
+    // Allocate matrix for backgrounds
+    backgrounds := make([][]^sdl2.Texture, mapCol)
+    for i in 0..<mapCol {
+        backgrounds[i] = make([]^sdl2.Texture, mapRow)
+    }
+
+    surfaceB := makeSurface("backgrounds/newBackground")
+    textureB := makeTexture(info.screen.renderer, surfaceB)
+
+    for i in 0..<mapCol {
+        for j in 0..<mapRow {
+            EnemiesArr := make([][]^Enemy, cols)
+            for i in 0..<cols {
+                EnemiesArr[i] = make([]^Enemy, rows)
+            }
+            enemiesMatrix[i][j] = new(Enemies)
+            enemiesMatrix[i][j].enemies = EnemiesArr
+            backgrounds[i][j] = textureB
+        }
+    }
+
+    gameMap.x = 0
+    gameMap.y = 0
+    gameMap.x_max = mapCol
+    gameMap.y_max = mapRow
+    gameMap.enemies = enemiesMatrix
+    gameMap.background = backgrounds
+}
+
 
 main :: proc() {
     // Initialize SDL
@@ -219,8 +310,8 @@ main :: proc() {
         sdl2.Quit()
         ttf.CloseFont(font)
     }
-    rows := 12
-    cols := 12
+    rows := 10
+    cols := 10
     // Grid settings
     size := 1000
     rand := make([]int, size)
@@ -244,7 +335,7 @@ main :: proc() {
 
     info.screen.renderer = createRenderer(createWindow(info.screen))
 
-    surfaceB := makeSurface("newBackground")
+    surfaceB := makeSurface("backgrounds/newBackground")
     textureB := makeTexture(info.screen.renderer, surfaceB)
     defer {
         sdl2.FreeSurface(surfaceB)
@@ -257,43 +348,27 @@ main :: proc() {
         TextEntity{"Points: ", sdl2.Color{255, 255, 255, 255}, 0.0, 0.8, 100, 50},
     }
 
-    EnemiesArr := make([][]^Enemy, cols)
-    for i in 0..<cols {
-        EnemiesArr[i] = make([]^Enemy, rows)
-    }
-    enemies : Enemies = Enemies{
-        enemies = EnemiesArr,
-    }
-
-    // Load rang
-    surfaceRang := makeSurface("rang")
-    rangTexture := makeTexture(info.screen.renderer, surfaceRang)
-
-    info.game.textures["rang"] = rangTexture
     
-    enemies.enemies[2][3] = new(Enemy)
-    enemies.enemies[2][3].texture = info.game.textures["rang"]
-    enemies.enemies[5][1] = new(Enemy)
-    enemies.enemies[5][1].texture = info.game.textures["rang"]
 
     you := new(Entity)
-    you.ypos = 0
-    you.xpos = 0
-    you.textures = make([]^sdl2.Texture,5)
-    you.textures[0] = makeTexture(info.screen.renderer, makeSurface("sanic/sanic"))
-    you.textures[1] = makeTexture(info.screen.renderer, makeSurface("sanic/sanic_ran_up"))
-    you.textures[2] = makeTexture(info.screen.renderer, makeSurface("sanic/sanic_ran_right"))
-    you.textures[3] = makeTexture(info.screen.renderer, makeSurface("sanic/sanic_ran_down"))
-    you.textures[4] = makeTexture(info.screen.renderer, makeSurface("sanic/sanic_ran_left"))
-    you.cooldown = 0
+    makePlayer(you, info)
+    gameMap := new(Map)
+    makeMap(gameMap, rows,cols, &info)
+    info.game.gMap = gameMap
+    // Load rang
+    rangTexture := makeTexture(info.screen.renderer, makeSurface("enemies/rang"))
+
+    info.game.textures["rang"] = rangTexture
+
+    
     //TEST END 
 
     running := true
     for running {
         keyEvents(&running, &info, you, info.screen)
         if(!info.game.paused){
-            eventLoop(you, &enemies, &info)
+            eventLoop(you, &info)
         }
-        draw(&info, you, TextEntities, &enemies)
+        draw(&info, you, TextEntities)
     }
 }
