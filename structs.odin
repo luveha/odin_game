@@ -14,9 +14,9 @@ Entity :: struct {
     textures: []^sdl2.Texture,
     cooldown: int
 }
-Map :: struct {
-    background: [][]^sdl2.Texture,
-    enemies: [][]^Enemies,
+Chunks :: struct {
+    chunk_backgrounds: [][]^sdl2.Texture,
+    chunk_enemies: [][]^Enemies,
     y: int,
     x: int,
     y_max: int,
@@ -45,11 +45,10 @@ Screen :: struct {
     cols: i32,
     renderer: ^sdl2.Renderer,
     font: ^ttf.Font,
-    background: ^sdl2.Texture,
 }
 Game :: struct {
     points: int,
     paused: bool,
     textures: map[string]^sdl2.Texture,
-    gMap: ^Map
+    chunks: ^Chunks
 }

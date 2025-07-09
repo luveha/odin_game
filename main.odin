@@ -41,9 +41,9 @@ keyEvents :: proc(running: ^bool, info: ^Information, you: ^Entity, screen: ^Scr
                         you.ypos -= 1
                         moved = true
                     } else {
-                        y_curr := info.game.gMap.y
+                        y_curr := info.game.chunks.y
                         if((y_curr - 1) >= 0){
-                            info.game.gMap.y -= 1
+                            info.game.chunks.y -= 1
                             you.ypos = info.screen.rows -1
                         }
                     }
@@ -53,10 +53,10 @@ keyEvents :: proc(running: ^bool, info: ^Information, you: ^Entity, screen: ^Scr
                         you.ypos += 1
                         moved = true
                     } else {
-                        y_max := info.game.gMap.y_max
-                        y_curr := info.game.gMap.y
+                        y_max := info.game.chunks.y_max
+                        y_curr := info.game.chunks.y
                         if((y_curr + 1) < y_max){
-                            info.game.gMap.y += 1
+                            info.game.chunks.y += 1
                             you.ypos = 0
                         }
                     }
@@ -66,9 +66,9 @@ keyEvents :: proc(running: ^bool, info: ^Information, you: ^Entity, screen: ^Scr
                         you.xpos -= 1
                         moved = true
                     } else {
-                        x_curr := info.game.gMap.x
+                        x_curr := info.game.chunks.x
                         if((x_curr - 1) >= 0){
-                            info.game.gMap.x -= 1
+                            info.game.chunks.x -= 1
                             you.xpos = info.screen.cols -1
                         }
                     }
@@ -78,10 +78,10 @@ keyEvents :: proc(running: ^bool, info: ^Information, you: ^Entity, screen: ^Scr
                         you.xpos += 1
                         moved = true
                     } else {
-                        x_max := info.game.gMap.x_max
-                        x_curr := info.game.gMap.x
+                        x_max := info.game.chunks.x_max
+                        x_curr := info.game.chunks.x
                         if((x_curr + 1) < x_max){
-                            info.game.gMap.x += 1
+                            info.game.chunks.x += 1
                             you.xpos = 0
                         }
                     }
@@ -108,12 +108,12 @@ keyEvents :: proc(running: ^bool, info: ^Information, you: ^Entity, screen: ^Scr
 
 draw :: proc(info: ^Information, you: ^Entity, textEntities: []TextEntity ) {
     
-    xMapPos := info.game.gMap.x
-    yMapPos := info.game.gMap.y
+    xMapPos := info.game.chunks.x
+    yMapPos := info.game.chunks.y
 
-    enemies := info.game.gMap.enemies[xMapPos][yMapPos].enemies
-
+    enemies := info.game.chunks.chunk_enemies[xMapPos][yMapPos].enemies
     renderer := &info.screen.renderer
+    background := info.game.chunks.chunk_backgrounds[xMapPos][yMapPos]
     // Clear screen
     sdl2.SetRenderDrawColor(renderer^, 0, 0, 0, 255)
     sdl2.RenderClear(renderer^)
@@ -126,7 +126,7 @@ draw :: proc(info: ^Information, you: ^Entity, textEntities: []TextEntity ) {
     cell_width := getCellWidth(screen)
     cell_height := getCellHeight(screen)
     // Draw background
-    sdl2.RenderCopy(renderer^, info.screen.background, nil, &sdl2.Rect {
+    sdl2.RenderCopy(renderer^, background, nil, &sdl2.Rect {
         x = 0,
         y = 0,
         w = screen.height,
@@ -218,10 +218,10 @@ drawMenu :: proc(info: ^Information) {
 }
 
 eventLoop :: proc(you: ^Entity, info: ^Information) {
-    xMapPos := info.game.gMap.x
-    yMapPos := info.game.gMap.y
+    xMapPos := info.game.chunks.x
+    yMapPos := info.game.chunks.y
 
-    chunk := info.game.gMap.enemies[xMapPos][yMapPos]
+    chunk := info.game.chunks.chunk_enemies[xMapPos][yMapPos]
     enemies := chunk.enemies
     
     if enemies[you.xpos][you.ypos] != nil {
@@ -229,18 +229,26 @@ eventLoop :: proc(you: ^Entity, info: ^Information) {
         enemies[you.xpos][you.ypos] = nil
         info.game.points += 10
     }
+    
+    for i in 0..<info.game.chunks.x_max{
+        for j in 0..<info.game.chunks.y_max {
+            spawnChance := rand.int31_max(1000)
+            if spawnChance <= 10 {
+                
+                
+                x := rand.int31_max(info.screen.rows)
+                y := rand.int31_max(info.screen.cols)
+                
+                enemiesSpawn := info.game.chunks.chunk_enemies[i][j].enemies
 
-    spawnChance := rand.int31_max(1000)
-    if spawnChance <= 10 {
-        x := rand.int31_max(info.screen.rows)
-        y := rand.int31_max(info.screen.cols)
-
-        isTakenByPlayer : bool = (you.xpos == x) && (you.ypos == y)
-        isOccupied : bool = (enemies[x][y] != nil)
-
-        if(!isTakenByPlayer && !isOccupied) {
-            enemies[x][y] = new(Enemy)
-            enemies[x][y].texture = info.game.textures["rang"]
+                isTakenByPlayer : bool = (you.xpos == x) && (you.ypos == y)
+                isOccupied : bool = (enemiesSpawn[x][y] != nil)
+        
+                if(!isTakenByPlayer && !isOccupied) {
+                    enemiesSpawn[x][y] = new(Enemy)
+                    enemiesSpawn[x][y].texture = info.game.textures["rang"]
+                }
+            }
         }
     }
 }
@@ -257,7 +265,7 @@ makePlayer :: proc(you: ^Entity, info: Information) {
     you.cooldown = 0
 }
 
-makeMap :: proc(gameMap: ^Map, rows: int, cols: int, info: ^Information) {
+makeMap :: proc(gameMap: ^Chunks, rows: int, cols: int, info: ^Information) {
     mapCol := 3
     mapRow := 3
 
@@ -275,7 +283,13 @@ makeMap :: proc(gameMap: ^Map, rows: int, cols: int, info: ^Information) {
 
     surfaceB := makeSurface("backgrounds/newBackground")
     textureB := makeTexture(info.screen.renderer, surfaceB)
-
+    //Manually set backgrounds
+    backgrounds[0][1] = makeTexture(info.screen.renderer, makeSurface("backgrounds/desert_background"))
+    backgrounds[0][2] = makeTexture(info.screen.renderer, makeSurface("backgrounds/ice_background"))
+    backgrounds[1][0] = makeTexture(info.screen.renderer, makeSurface("backgrounds/jungle_background"))
+    backgrounds[1][1] = makeTexture(info.screen.renderer, makeSurface("backgrounds/gamble_background"))
+    backgrounds[1][2] = makeTexture(info.screen.renderer, makeSurface("backgrounds/road_background"))
+    //
     for i in 0..<mapCol {
         for j in 0..<mapRow {
             EnemiesArr := make([][]^Enemy, cols)
@@ -284,7 +298,9 @@ makeMap :: proc(gameMap: ^Map, rows: int, cols: int, info: ^Information) {
             }
             enemiesMatrix[i][j] = new(Enemies)
             enemiesMatrix[i][j].enemies = EnemiesArr
-            backgrounds[i][j] = textureB
+            if(backgrounds[i][j] == nil) {
+                backgrounds[i][j] = textureB
+            }
         }
     }
 
@@ -292,8 +308,8 @@ makeMap :: proc(gameMap: ^Map, rows: int, cols: int, info: ^Information) {
     gameMap.y = 0
     gameMap.x_max = mapCol
     gameMap.y_max = mapRow
-    gameMap.enemies = enemiesMatrix
-    gameMap.background = backgrounds
+    gameMap.chunk_enemies = enemiesMatrix
+    gameMap.chunk_backgrounds = backgrounds
 }
 
 
@@ -313,11 +329,6 @@ main :: proc() {
     rows := 10
     cols := 10
     // Grid settings
-    size := 1000
-    rand := make([]int, size)
-    for i in 0..<size {
-        rand[i] = i
-    }
     info : Information = Information {
         screen = &Screen {
             width = 800,
@@ -335,15 +346,6 @@ main :: proc() {
 
     info.screen.renderer = createRenderer(createWindow(info.screen))
 
-    surfaceB := makeSurface("backgrounds/newBackground")
-    textureB := makeTexture(info.screen.renderer, surfaceB)
-    defer {
-        sdl2.FreeSurface(surfaceB)
-        sdl2.DestroyTexture(textureB)
-    }
-    info.screen.background = textureB
-    // Create text texture
-
     TextEntities : []TextEntity = {
         TextEntity{"Points: ", sdl2.Color{255, 255, 255, 255}, 0.0, 0.8, 100, 50},
     }
@@ -352,9 +354,9 @@ main :: proc() {
 
     you := new(Entity)
     makePlayer(you, info)
-    gameMap := new(Map)
-    makeMap(gameMap, rows,cols, &info)
-    info.game.gMap = gameMap
+    chunks := new(Chunks)
+    makeMap(chunks, rows,cols, &info)
+    info.game.chunks = chunks
     // Load rang
     rangTexture := makeTexture(info.screen.renderer, makeSurface("enemies/rang"))
 
